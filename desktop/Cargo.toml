@@ -1,0 +1,33 @@
+[package]
+name = "fieldnote-desktop"
+version = "0.1.0"
+description = "Fieldnote - AI work documentation, reports and presentations"
+authors = ["Fieldnote"]
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# The interface is served over HTTP by the bundled backend, so the asset
+# protocol is deliberately not enabled.
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rand = "0.8"
+
+[features]
+# Prevents a console window appearing behind the app on Windows release builds.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

@@ -1,0 +1,17 @@
+node_modules/
+dist/
+storage/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.local
+coverage/
+tmp/
+
+# Desktop build artifacts
+desktop/binaries/
+desktop/target/
+desktop/gen/
+desktop/runtime/

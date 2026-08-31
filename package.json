@@ -1,0 +1,31 @@
+{
+  "name": "fieldnote",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Work Documentation, Report & Presentation Platform",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace=server",
+    "dev:web": "npm run dev --workspace=web",
+    "build": "npm run build --workspace=web",
+    "start": "npm run start --workspace=server",
+    "migrate": "npm run migrate --workspace=server",
+    "seed": "npm run seed --workspace=server",
+    "test": "npm run test --workspace=server",
+    "typecheck": "npm run typecheck --workspace=server && npm run typecheck --workspace=web",
+    "desktop:dev": "npm run desktop:prepare && npx --yes @tauri-apps/cli@2 dev --config desktop/tauri.conf.json",
+    "desktop:build": "npm run desktop:prepare && npx --yes @tauri-apps/cli@2 build --config desktop/tauri.conf.json",
+    "desktop:prepare": "node scripts/prepare-desktop.mjs",
+    "desktop:check": "cd desktop && cargo check"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "sharp@0.34.5": true
+  }
+}
