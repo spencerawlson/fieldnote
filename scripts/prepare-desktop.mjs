@@ -120,6 +120,50 @@ function copyNodeSidecar() {
   }
 }
 
+/**
+ * Stages WebView2Loader.dll next to the bundle resources.
+ *
+ * The MSVC toolchain links the WebView2 loader statically and Tauri's bundler
+ * assumes that. The GNU toolchain links it dynamically instead, so an installed
+ * build fails at launch with
+ * "error while loading shared libraries: WebView2Loader.dll". Shipping the DLL
+ * makes a GNU-toolchain build installable; it is harmless on MSVC, where the
+ * file simply is not produced and this becomes a no-op.
+ */
+function stageWebView2Loader() {
+  if (process.platform !== 'win32') return;
+
+  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+  const candidates = [
+    join(DESKTOP, 'target', 'release', 'WebView2Loader.dll'),
+    join(DESKTOP, 'target', 'debug', 'WebView2Loader.dll'),
+  ];
+
+  // Fall back to the copy the webview2-com-sys build script unpacks.
+  const buildRoot = join(DESKTOP, 'target', 'release', 'build');
+  if (existsSync(buildRoot)) {
+    for (const entry of readdirSync(buildRoot)) {
+      if (!entry.startsWith('webview2-com-sys-')) continue;
+      candidates.push(join(buildRoot, entry, 'out', arch, 'WebView2Loader.dll'));
+    }
+  }
+
+  const source = candidates.find((candidate) => existsSync(candidate));
+  if (!source) {
+    log('WebView2Loader.dll not found — assuming a static link (MSVC toolchain)');
+    return;
+  }
+
+  const target = join(DESKTOP, 'runtime', 'WebView2Loader.dll');
+  mkdirSync(dirname(target), { recursive: true });
+  if (existsSync(target) && statSync(target).size === statSync(source).size) {
+    log('WebView2Loader.dll already staged');
+    return;
+  }
+  copyFileSync(source, target);
+  log(`staged WebView2Loader.dll (${arch})`);
+}
+
 function checkNodeVersion() {
   const major = Number(process.versions.node.split('.')[0]);
   if (major < 24) {
@@ -137,5 +181,6 @@ checkNodeVersion();
 // hashed filenames that no longer exist.
 buildWebIfNeeded();
 pruneRuntime();
+stageWebView2Loader();
 copyNodeSidecar();
 log('ready');

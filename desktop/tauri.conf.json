@@ -47,12 +47,14 @@
       "../server/package.json": "server/package.json",
       "../web/dist": "web/dist",
       "../package.json": "package.json",
-      "runtime/node_modules": "node_modules"
+      "runtime/node_modules": "node_modules",
+      "runtime/WebView2Loader.dll": "WebView2Loader.dll"
     },
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "installerHooks": "installer-hooks.nsh"
       }
     },
     "linux": {
