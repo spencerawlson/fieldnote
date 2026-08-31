@@ -119,6 +119,7 @@ export interface Project {
   elaborationDepth: number;
   tone: string;
   audience: string;
+  voice: string;
   createdAt: string;
   updatedAt: string;
   counts?: Record<string, number>;
@@ -341,6 +342,7 @@ export interface Meta {
   categories: string[];
   tones: string[];
   audiences: string[];
+  voices: { value: string; label: string }[];
   depths: { value: number; label: string }[];
   ai: { name: string; configured: string; offline: boolean; models: Record<string, string> };
   limits: { maxUploadBytes: number; maxUploadsPerProject: number };

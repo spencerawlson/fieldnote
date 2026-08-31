@@ -37,7 +37,7 @@ import { getStorage } from '../files/storage.ts';
 import { authorizeProject } from '../security/auth.ts';
 import { parse, text, optionalText, depthSchema, z } from '../lib/validate.ts';
 import { AppError, notFound, badRequest } from '../lib/core.ts';
-import { TONES } from '../domain/types.ts';
+import { TONES, VOICES } from '../domain/types.ts';
 
 /** Themes are described to the client by their visible qualities, not their
  *  internal colour table — the picker shows a swatch and a sentence. */
@@ -110,6 +110,7 @@ export async function outputRoutes(app: FastifyInstance): Promise<void> {
         audience: text(60).optional(),
         depth: depthSchema.optional(),
         theme: text(30).optional(),
+        voice: z.enum(VOICES).optional(),
         generate: z.boolean().default(true),
       }),
       request.body ?? {},
@@ -126,6 +127,7 @@ export async function outputRoutes(app: FastifyInstance): Promise<void> {
       audience: body.audience ?? template.defaultAudience,
       depth: body.depth ?? Math.max(2, project.elaborationDepth),
       theme: getTheme(body.theme).key,
+      voice: body.voice ?? project.voice,
     });
 
     let jobId: string | null = null;
@@ -164,6 +166,7 @@ export async function outputRoutes(app: FastifyInstance): Promise<void> {
         audience: text(60).optional(),
         depth: depthSchema.optional(),
         theme: text(30).optional(),
+        voice: z.enum(VOICES).optional(),
       }),
       request.body,
     );
@@ -240,6 +243,7 @@ export async function outputRoutes(app: FastifyInstance): Promise<void> {
         tone: z.enum(TONES).optional(),
         slideTarget: z.coerce.number().int().min(3).max(40).default(12),
         theme: text(30).default('slate'),
+        voice: z.enum(VOICES).optional(),
         generate: z.boolean().default(true),
       }),
       request.body ?? {},
@@ -256,6 +260,7 @@ export async function outputRoutes(app: FastifyInstance): Promise<void> {
       tone: body.tone ?? template.defaultTone,
       slideTarget: body.slideTarget,
       theme: getTheme(body.theme).key,
+      voice: body.voice ?? project.voice,
     });
 
     let jobId: string | null = null;
@@ -299,6 +304,7 @@ export async function outputRoutes(app: FastifyInstance): Promise<void> {
         tone: z.enum(TONES).optional(),
         slideTarget: z.coerce.number().int().min(3).max(40).optional(),
         theme: text(30).optional(),
+        voice: z.enum(VOICES).optional(),
       }),
       request.body,
     );

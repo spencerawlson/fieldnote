@@ -32,6 +32,7 @@ export function SettingsPanel({ ctx }: { ctx: WorkspaceContext }) {
   const [findings, setFindings] = useState<SecretFinding[]>([]);
   const [tone, setTone] = useState(ctx.project.tone);
   const [audience, setAudience] = useState(ctx.project.audience);
+  const [voice, setVoice] = useState(ctx.project.voice);
   const [depth, setDepth] = useState(ctx.project.elaborationDepth);
   const [status, setStatus] = useState(ctx.project.status);
 
@@ -51,7 +52,7 @@ export function SettingsPanel({ ctx }: { ctx: WorkspaceContext }) {
 
   const save = async () => {
     try {
-      await api.patch(`/api/projects/${ctx.projectId}`, { tone, audience, elaborationDepth: depth, status });
+      await api.patch(`/api/projects/${ctx.projectId}`, { tone, audience, voice, elaborationDepth: depth, status });
       await ctx.reload();
       ctx.toast.show('Project settings saved.', 'ok');
     } catch (error) {
@@ -79,6 +80,18 @@ export function SettingsPanel({ ctx }: { ctx: WorkspaceContext }) {
                 {ctx.session.meta.audiences.map((option) => (
                   <option key={option} value={option}>
                     {option}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              label="Voice"
+              hint="Reports and decks are written as you by default, not about you."
+            >
+              <select className="select" value={voice} onChange={(e) => setVoice(e.target.value)} disabled={!ctx.canEdit}>
+                {(ctx.session.meta.voices ?? []).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </select>

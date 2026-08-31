@@ -13,7 +13,7 @@ import { providerInfo } from '../ai/registry.ts';
 import { metricsSnapshot } from '../lib/logger.ts';
 import { config } from '../config.ts';
 import { notFound } from '../lib/core.ts';
-import { STEP_CATEGORIES, TONES, AUDIENCES, DEPTH_LABELS } from '../domain/types.ts';
+import { STEP_CATEGORIES, TONES, AUDIENCES, DEPTH_LABELS, VOICES, VOICE_LABELS } from '../domain/types.ts';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await app.register(authRoutes);
@@ -43,6 +43,7 @@ async function systemRoutes(app: FastifyInstance): Promise<void> {
     categories: STEP_CATEGORIES,
     tones: TONES,
     audiences: AUDIENCES,
+    voices: VOICES.map((value) => ({ value, label: VOICE_LABELS[value] ?? value })),
     depths: Object.entries(DEPTH_LABELS).map(([value, label]) => ({ value: Number(value), label })),
     ai: providerInfo(),
     limits: {

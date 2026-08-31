@@ -112,7 +112,7 @@ export async function analyzeEvidenceImage(
   const bytes = isImage && provider.supportsVision ? await readFileBytes(file.storageKey) : null;
 
   const prompt = [
-    'Context for the capture (author-supplied metadata):',
+    'Context for the capture (recorded metadata):',
     fenceUntrusted(
       JSON.stringify({
         title: evidence.title,

@@ -50,6 +50,7 @@ export async function evidenceRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const created: unknown[] = [];
+      let queuedAnalysis = false;
       const parts = request.parts();
 
       for await (const part of parts) {
@@ -123,6 +124,7 @@ export async function evidenceRoutes(app: FastifyInstance): Promise<void> {
           type: 'evidence.analyze',
           payload: { projectId, evidenceId: evidence.id },
         });
+        queuedAnalysis = true;
 
         created.push({ evidence, file: publicFile(file) });
         audit(db, {
@@ -137,6 +139,19 @@ export async function evidenceRoutes(app: FastifyInstance): Promise<void> {
       }
 
       if (created.length === 0) throw badRequest('No files were included in the upload');
+
+      // Attach the new evidence to the work it supports. Queued once for the
+      // whole upload rather than per file, and after analysis so the classifier
+      // has the descriptions and extracted text to match on.
+      if (queuedAnalysis) {
+        enqueueJob(db, {
+          projectId,
+          userId: user.id,
+          type: 'evidence.classify',
+          payload: { projectId },
+        });
+      }
+
       return reply.code(201).send({ uploaded: created });
     },
   );

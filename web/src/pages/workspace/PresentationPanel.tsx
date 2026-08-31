@@ -328,6 +328,7 @@ function NewDeckModal({
   const [templateKey, setTemplateKey] = useState('technical-demo');
   const [slideTarget, setSlideTarget] = useState(12);
   const [audience, setAudience] = useState(ctx.project.audience);
+  const [voice, setVoice] = useState(ctx.project.voice);
   const [theme, setTheme] = useState('slate');
   const [busy, setBusy] = useState(false);
 
@@ -355,7 +356,7 @@ function NewDeckModal({
               try {
                 const created = await api.post<{ presentation: { id: string } }>(
                   `/api/projects/${ctx.projectId}/presentations`,
-                  { templateKey, slideTarget, audience, theme, generate: true },
+                  { templateKey, slideTarget, audience, voice, theme, generate: true },
                 );
                 ctx.toast.show('Building the deck…');
                 onCreated(created.presentation.id);
@@ -397,6 +398,15 @@ function NewDeckModal({
               {ctx.session.meta.audiences.map((option) => (
                 <option key={option} value={option}>
                   {option}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Voice" hint="Your own account of your own work, unless you say otherwise.">
+            <select className="select" value={voice} onChange={(e) => setVoice(e.target.value)}>
+              {(ctx.session.meta.voices ?? []).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>

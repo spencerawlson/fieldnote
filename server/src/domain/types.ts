@@ -140,6 +140,47 @@ export const TONES = [
 ] as const;
 export type Tone = (typeof TONES)[number];
 
+/**
+ * Narrative voice — how the document refers to the person who did the work.
+ *
+ * This exists because the alternative is worse: without an explicit choice the
+ * model reaches for "the author", and a report about your own work then reads
+ * as though a stranger wrote it about you.
+ */
+export const VOICES = ['first-person', 'first-person-plural', 'impersonal'] as const;
+export type Voice = (typeof VOICES)[number];
+
+export const VOICE_GUIDANCE: Record<string, string> = {
+  'first-person':
+    'Write in the first person singular, as the person who did the work: "I installed", "I configured", ' +
+    '"my objective was". This is their own account of their own work.',
+  'first-person-plural':
+    'Write in the first person plural, as the team who did the work: "we installed", "we configured", ' +
+    '"our objective was".',
+  impersonal:
+    'Write impersonally, with the work as the subject: "the server was installed", "the client was ' +
+    'reconfigured". Do not use "I" or "we".',
+};
+
+export const VOICE_LABELS: Record<string, string> = {
+  'first-person': 'First person — "I configured…"',
+  'first-person-plural': 'Team — "We configured…"',
+  impersonal: 'Impersonal — "The client was configured…"',
+};
+
+/**
+ * The rule that applies whatever the voice. Referring to the person in the
+ * third person ("the author", "the user") is always wrong: it is their
+ * document, describing their own work, and the distance reads as a machine
+ * talking about them rather than for them.
+ */
+export const NEVER_THIRD_PERSON =
+  'NEVER refer to the person who did this work as "the author", "the user", "the operator", ' +
+  '"the engineer" or any other third-party label, and never attribute their statements to them as ' +
+  'though quoting a stranger ("the author states…", "as identified by the author"). It is their own ' +
+  'document about their own work. Where you would have written "the author", either use the voice ' +
+  'given above or recast the sentence around the work itself.';
+
 export const AUDIENCES = [
   'professor',
   'technical-team',
@@ -308,6 +349,7 @@ export interface ProjectRecord {
   elaborationDepth: number;
   tone: Tone;
   audience: Audience;
+  voice: Voice;
   settings: Record<string, unknown>;
   startedAt: string | null;
   endedAt: string | null;

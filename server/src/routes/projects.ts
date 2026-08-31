@@ -28,7 +28,7 @@ import { indexProject } from '../search/indexer.ts';
 import { authorizeProject, requireUser } from '../security/auth.ts';
 import { parse, text, optionalText, depthSchema, z } from '../lib/validate.ts';
 import { notFound, badRequest } from '../lib/core.ts';
-import { TONES } from '../domain/types.ts';
+import { TONES, VOICES } from '../domain/types.ts';
 
 const createSchema = z.object({
   title: text(200, 1),
@@ -37,6 +37,7 @@ const createSchema = z.object({
   domain: optionalText(80),
   tone: z.enum(TONES).optional(),
   audience: text(60).optional(),
+  voice: z.enum(VOICES).optional(),
   elaborationDepth: depthSchema.optional(),
 });
 
@@ -53,6 +54,7 @@ const updateSchema = z.object({
   status: z.enum(['draft', 'active', 'complete', 'archived']).optional(),
   tone: z.enum(TONES).optional(),
   audience: text(60).optional(),
+  voice: z.enum(VOICES).optional(),
   elaborationDepth: depthSchema.optional(),
   startedAt: z.string().datetime().optional().nullable(),
   endedAt: z.string().datetime().optional().nullable(),

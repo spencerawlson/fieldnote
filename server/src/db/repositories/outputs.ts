@@ -14,6 +14,7 @@ export interface ReportRecord {
   author: string | null;
   tone: string;
   audience: string;
+  voice: string;
   depth: number;
   theme: string;
   status: 'draft' | 'generating' | 'ready' | 'failed';
@@ -50,6 +51,7 @@ export function createReport(
     author?: string | null;
     tone?: string;
     audience?: string;
+    voice?: string;
     depth?: number;
     theme?: string;
   },
@@ -57,9 +59,9 @@ export function createReport(
   const id = newId('report');
   const now = nowIso();
   db.run(
-    `INSERT INTO reports (id, project_id, template_key, title, subtitle, author, tone, audience, depth,
-       theme, status, version, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO reports (id, project_id, template_key, title, subtitle, author, tone, audience, voice,
+       depth, theme, status, version, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     id,
     input.projectId,
     input.templateKey,
@@ -68,6 +70,7 @@ export function createReport(
     input.author ?? null,
     input.tone ?? 'technical',
     input.audience ?? 'technical-team',
+    input.voice ?? 'first-person',
     input.depth ?? 3,
     input.theme ?? 'slate',
     'draft',
@@ -98,6 +101,7 @@ export function updateReport(db: Database, id: string, patch: Record<string, unk
     author: 'author',
     tone: 'tone',
     audience: 'audience',
+    voice: 'voice',
     depth: 'depth',
     theme: 'theme',
     templateKey: 'template_key',
@@ -185,6 +189,7 @@ export interface PresentationRecord {
   presenter: string | null;
   audience: string;
   tone: string;
+  voice: string;
   slideTarget: number;
   theme: string;
   status: 'draft' | 'generating' | 'ready' | 'failed';
@@ -227,6 +232,7 @@ export function createPresentation(
     presenter?: string | null;
     audience?: string;
     tone?: string;
+    voice?: string;
     slideTarget?: number;
     theme?: string;
   },
@@ -235,8 +241,8 @@ export function createPresentation(
   const now = nowIso();
   db.run(
     `INSERT INTO presentations (id, project_id, template_key, title, subtitle, presenter, audience, tone,
-       slide_target, theme, status, version, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       voice, slide_target, theme, status, version, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     id,
     input.projectId,
     input.templateKey,
@@ -245,6 +251,7 @@ export function createPresentation(
     input.presenter ?? null,
     input.audience ?? 'technical-team',
     input.tone ?? 'technical',
+    input.voice ?? 'first-person',
     input.slideTarget ?? 12,
     input.theme ?? 'slate',
     'draft',
@@ -275,6 +282,7 @@ export function updatePresentation(db: Database, id: string, patch: Record<strin
     presenter: 'presenter',
     audience: 'audience',
     tone: 'tone',
+    voice: 'voice',
     slideTarget: 'slide_target',
     theme: 'theme',
     templateKey: 'template_key',

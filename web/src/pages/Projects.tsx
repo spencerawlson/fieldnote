@@ -127,6 +127,7 @@ function NewProjectModal({
   const [notes, setNotes] = useState('');
   const [tone, setTone] = useState('technical');
   const [audience, setAudience] = useState('technical-team');
+  const [voice, setVoice] = useState('first-person');
   const [depth, setDepth] = useState(2);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
@@ -139,6 +140,7 @@ function NewProjectModal({
         objective: objective || null,
         tone,
         audience,
+        voice,
         elaborationDepth: depth,
       });
       const projectId = created.project.id;
@@ -233,6 +235,16 @@ function NewProjectModal({
             </select>
           </Field>
         </div>
+
+        <Field label="Voice" hint="This is your account of your own work, so it is written as you by default.">
+          <select className="select" value={voice} onChange={(e) => setVoice(e.target.value)}>
+            {(session.meta.voices ?? []).map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </Field>
       </div>
       {toast.node}
     </Modal>

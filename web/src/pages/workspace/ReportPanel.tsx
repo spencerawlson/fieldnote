@@ -360,6 +360,7 @@ function NewReportModal({
   const [depth, setDepth] = useState(Math.max(2, ctx.project.elaborationDepth));
   const [tone, setTone] = useState(ctx.project.tone);
   const [audience, setAudience] = useState(ctx.project.audience);
+  const [voice, setVoice] = useState(ctx.project.voice);
   const [theme, setTheme] = useState('slate');
   const [busy, setBusy] = useState(false);
 
@@ -391,6 +392,7 @@ function NewReportModal({
                   depth,
                   tone,
                   audience,
+                  voice,
                   theme,
                   generate: true,
                 });
@@ -460,6 +462,15 @@ function NewReportModal({
               {ctx.session.meta.audiences.map((option) => (
                 <option key={option} value={option}>
                   {option}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Voice" hint="Your own account of your own work, unless you say otherwise.">
+            <select className="select" value={voice} onChange={(e) => setVoice(e.target.value)}>
+              {(ctx.session.meta.voices ?? []).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>

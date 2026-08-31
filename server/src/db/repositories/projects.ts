@@ -19,6 +19,7 @@ const COLUMNS: Record<string, string> = {
   elaborationDepth: 'elaboration_depth',
   tone: 'tone',
   audience: 'audience',
+  voice: 'voice',
   settings: 'settings_json',
   startedAt: 'started_at',
   endedAt: 'ended_at',
@@ -32,6 +33,7 @@ export interface CreateProjectInput {
   domain?: string | null;
   tone?: string;
   audience?: string;
+  voice?: string;
   elaborationDepth?: number;
 }
 
@@ -41,8 +43,8 @@ export function createProject(db: Database, input: CreateProjectInput): ProjectR
   db.tx(() => {
     db.run(
       `INSERT INTO projects (id, owner_id, title, summary, objective, domain, tone, audience,
-        elaboration_depth, status, settings_json, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        voice, elaboration_depth, status, settings_json, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       id,
       input.ownerId,
       input.title,
@@ -51,6 +53,7 @@ export function createProject(db: Database, input: CreateProjectInput): ProjectR
       input.domain ?? null,
       input.tone ?? 'technical',
       input.audience ?? 'technical-team',
+      input.voice ?? 'first-person',
       input.elaborationDepth ?? 2,
       'draft',
       '{}',
