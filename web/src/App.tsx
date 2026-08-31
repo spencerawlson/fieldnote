@@ -8,6 +8,7 @@ import { TemplatesPage } from './pages/Templates.tsx';
 import { SettingsPage } from './pages/Settings.tsx';
 import { ProjectWorkspace } from './pages/workspace/ProjectWorkspace.tsx';
 import { Button } from './components/ui.tsx';
+import { AppearanceToggle } from './components/AppearanceToggle.tsx';
 
 export interface Session {
   user: User;
@@ -135,6 +136,9 @@ function Sidebar({ session }: { session: Session }) {
             </span>
           </div>
         ) : null}
+        <div className="row" style={{ marginBottom: '0.55rem' }}>
+          <AppearanceToggle />
+        </div>
         <div className="row" style={{ gap: '0.5rem' }}>
           <div style={{ minWidth: 0 }}>
             <div className="small truncate" style={{ fontWeight: 600 }}>{session.user.name}</div>
