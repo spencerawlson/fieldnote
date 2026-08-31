@@ -26,6 +26,17 @@ pub struct ServerHandle {
 }
 
 impl ServerHandle {
+    /// Whether the child has already exited, and with what status. Does not
+    /// block and does not consume the handle.
+    pub fn exited(&self) -> Option<String> {
+        let mut guard = self.child.lock().ok()?;
+        let child = guard.as_mut()?;
+        match child.try_wait() {
+            Ok(Some(status)) => Some(status.to_string()),
+            _ => None,
+        }
+    }
+
     /// Terminates the backend. Safe to call more than once.
     pub fn shutdown(&self) {
         if let Ok(mut guard) = self.child.lock() {
@@ -61,10 +72,7 @@ impl std::fmt::Display for StartError {
                 path.display()
             ),
             StartError::Spawn(message) => write!(f, "Could not start the Fieldnote backend: {message}"),
-            StartError::Timeout(log) => write!(
-                f,
-                "The Fieldnote backend did not become ready in time.\n\nLast output:\n{log}"
-            ),
+            StartError::Timeout(log) => write!(f, "The Fieldnote backend did not start.\n\n{log}"),
         }
     }
 }
@@ -100,26 +108,48 @@ pub struct StartOptions {
     pub env: Vec<(String, String)>,
 }
 
+/// Strips the Windows extended-length prefix from a path.
+///
+/// Tauri returns `resource_dir()` as `\\?\C:\…`. That form is valid for the
+/// Win32 API but Node cannot resolve it as a main module path — it fails
+/// immediately with `EISDIR: illegal operation on a directory, lstat 'C:'`.
+/// Every path handed to the child process goes through here.
+fn plain_path(path: &Path) -> PathBuf {
+    let text = path.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        // \\?\UNC\server\share -> \\server\share
+        return PathBuf::from(format!(r"\\{rest}"));
+    }
+    if let Some(rest) = text.strip_prefix(r"\\?\") {
+        return PathBuf::from(rest);
+    }
+    path.to_path_buf()
+}
+
 pub fn start(options: StartOptions) -> Result<(ServerHandle, String), StartError> {
-    let entry = options.resource_dir.join("server").join("src").join("index.ts");
+    let resource_dir = plain_path(&options.resource_dir);
+    let node_binary = plain_path(&options.node_binary);
+    let data_dir = plain_path(&options.data_dir);
+
+    let entry = resource_dir.join("server").join("src").join("index.ts");
     if !entry.exists() {
         return Err(StartError::MissingResource(entry));
     }
-    if !options.node_binary.exists() {
-        return Err(StartError::MissingResource(options.node_binary));
+    if !node_binary.exists() {
+        return Err(StartError::MissingResource(node_binary));
     }
 
     let port = free_port().ok_or(StartError::NoPort)?;
     let url = format!("http://127.0.0.1:{port}");
     let secret = options.session_secret.unwrap_or_else(random_secret);
 
-    std::fs::create_dir_all(&options.data_dir).ok();
+    std::fs::create_dir_all(&data_dir).ok();
 
-    let mut command = Command::new(&options.node_binary);
+    let mut command = Command::new(&node_binary);
     command
         .arg("--disable-warning=ExperimentalWarning")
         .arg(&entry)
-        .current_dir(&options.resource_dir)
+        .current_dir(&resource_dir)
         .env("NODE_ENV", "production")
         .env("PORT", port.to_string())
         .env("APP_URL", &url)
@@ -127,8 +157,8 @@ pub fn start(options: StartOptions) -> Result<(ServerHandle, String), StartError
         .env("SESSION_SECRET", secret)
         // Everything the user creates lives under their profile, never inside
         // the installation directory (which is read-only for standard users).
-        .env("DATABASE_PATH", options.data_dir.join("fieldnote.db"))
-        .env("STORAGE_PATH", options.data_dir.join("uploads"))
+        .env("DATABASE_PATH", data_dir.join("fieldnote.db"))
+        .env("STORAGE_PATH", data_dir.join("uploads"))
         .env("ALLOWED_ORIGINS", &url)
         .env("LOG_LEVEL", "info")
         .stdout(Stdio::piped())
@@ -172,7 +202,7 @@ pub fn start(options: StartOptions) -> Result<(ServerHandle, String), StartError
         child: Arc::new(Mutex::new(Some(child))),
     };
 
-    wait_until_healthy(&url, Duration::from_secs(45), &log)?;
+    wait_until_healthy(&url, Duration::from_secs(45), &log, &handle)?;
     Ok((handle, url))
 }
 
@@ -182,6 +212,7 @@ fn wait_until_healthy(
     url: &str,
     timeout: Duration,
     log: &Arc<Mutex<Vec<String>>>,
+    handle: &ServerHandle,
 ) -> Result<(), StartError> {
     use std::io::{Read, Write};
     use std::net::TcpStream;
@@ -190,6 +221,19 @@ fn wait_until_healthy(
     let deadline = Instant::now() + timeout;
 
     while Instant::now() < deadline {
+        // A backend that exits on startup — a bad config, a missing module —
+        // will never become healthy. Noticing that here turns a 45-second wait
+        // on a blank splash into an immediate, accurate error.
+        if let Some(status) = handle.exited() {
+            let tail = log
+                .lock()
+                .map(|buffer| buffer.join("\n"))
+                .unwrap_or_default();
+            return Err(StartError::Timeout(format!(
+                "The backend exited immediately ({status}).\n\n{tail}"
+            )));
+        }
+
         if let Ok(mut stream) = TcpStream::connect(&address) {
             let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
             let request = format!("GET /api/health HTTP/1.0\r\nHost: {address}\r\n\r\n");
@@ -226,22 +270,55 @@ pub fn save_settings(config_dir: &Path, settings: &serde_json::Value) -> std::io
 }
 
 /// Turns stored settings into the environment the backend expects.
+///
+/// The backend refuses to start in production without a key for the configured
+/// provider — correct for a server, wrong for a desktop app, where running
+/// offline against the deterministic provider is a supported state and the
+/// user may not have entered a key yet. When no key is present the provider is
+/// set explicitly to `mock` rather than letting the backend fail its own
+/// production assertion and leave the window on an error splash.
 pub fn settings_to_env(settings: &serde_json::Value) -> Vec<(String, String)> {
     let mut env = Vec::new();
-    let mut copy = |json_key: &str, env_key: &str| {
-        if let Some(value) = settings.get(json_key).and_then(|v| v.as_str()) {
-            if !value.trim().is_empty() {
-                env.push((env_key.to_string(), value.trim().to_string()));
-            }
-        }
+
+    let text = |key: &str| -> Option<String> {
+        settings
+            .get(key)
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
     };
-    copy("provider", "AI_PROVIDER");
-    copy("openaiApiKey", "OPENAI_API_KEY");
-    copy("anthropicApiKey", "ANTHROPIC_API_KEY");
-    copy("openaiBaseUrl", "OPENAI_BASE_URL");
-    copy("modelReasoning", "AI_MODEL_REASONING");
-    copy("modelFast", "AI_MODEL_FAST");
-    copy("modelVision", "AI_MODEL_VISION");
-    copy("ocrDriver", "OCR_DRIVER");
+
+    // A free function rather than a closure: a closure would hold a mutable
+    // borrow of `env` for the rest of the scope, blocking the direct push below.
+    fn push(env: &mut Vec<(String, String)>, key: &str, value: Option<String>) {
+        if let Some(value) = value {
+            env.push((key.to_string(), value));
+        }
+    }
+
+    let provider = text("provider").unwrap_or_else(|| "openai".to_string());
+    let openai_key = text("openaiApiKey");
+    let anthropic_key = text("anthropicApiKey");
+
+    let has_key = match provider.as_str() {
+        "openai" => openai_key.is_some(),
+        "anthropic" => anthropic_key.is_some(),
+        // An explicit "mock" needs no key.
+        _ => true,
+    };
+
+    env.push((
+        "AI_PROVIDER".to_string(),
+        if has_key { provider } else { "mock".to_string() },
+    ));
+
+    push(&mut env, "OPENAI_API_KEY", openai_key);
+    push(&mut env, "ANTHROPIC_API_KEY", anthropic_key);
+    push(&mut env, "OPENAI_BASE_URL", text("openaiBaseUrl"));
+    push(&mut env, "AI_MODEL_REASONING", text("modelReasoning"));
+    push(&mut env, "AI_MODEL_FAST", text("modelFast"));
+    push(&mut env, "AI_MODEL_VISION", text("modelVision"));
+    push(&mut env, "OCR_DRIVER", text("ocrDriver"));
     env
 }

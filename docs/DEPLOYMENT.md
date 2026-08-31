@@ -212,6 +212,31 @@ Expect roughly 190 MB installed: the Node runtime is ~90 MB and the pruned
 dependency tree another ~93 MB. The compression step is the slow part of the
 build — several minutes on a modest machine.
 
+### Two things the shell has to get right on Windows
+
+Both were found by actually launching the built app rather than by reading the
+code, and both fail in ways that look like a broken product:
+
+**Extended-length paths.** Tauri returns `resource_dir()` as `\\?\C:\…`. That form
+is valid for the Win32 API, but Node cannot resolve it as a main module path — it
+exits immediately with `EISDIR: illegal operation on a directory, lstat 'C:'`.
+Every path handed to the child process therefore goes through `plain_path()` in
+`desktop/src/server.rs`, which strips the prefix (including the `\\?\UNC\` form).
+
+**Offline mode must be allowed.** `assertProductionConfig()` refuses to start
+without an API key for the configured provider. That is right for a server and
+wrong for a desktop app, where running against the deterministic provider is a
+supported state and the user may not have entered a key yet. The shell therefore
+sets `AI_PROVIDER=mock` explicitly when no key is stored, rather than letting the
+backend fail its own assertion and leave the window on an error splash.
+
+A related robustness fix: the health poll now checks whether the child has
+already exited, so a backend that dies on startup reports the reason immediately
+instead of after the full 45-second timeout. Startup failures are written to
+`startup-error.log` in the config directory as well as shown on the splash,
+because an error visible only in a GUI window is nearly impossible to support
+remotely.
+
 ### How the shell behaves
 
 1. Opens a window on a splash page immediately.

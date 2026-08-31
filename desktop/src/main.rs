@@ -154,7 +154,28 @@ fn main() {
                         }
                     }
                     Err(error) => {
-                        let _ = handle.emit("fieldnote://failed", error.to_string());
+                        // A failure that only appears on the splash window is
+                        // almost impossible to support remotely. Write it where
+                        // it can be read, and to stderr for a console launch.
+                        let message = error.to_string();
+                        eprintln!("Fieldnote failed to start: {message}");
+                        let log = state.config_dir.join("startup-error.log");
+                        let _ = std::fs::write(
+                            &log,
+                            format!(
+                                "{}
+
+resource_dir: {}
+data_dir: {}
+node: {}
+",
+                                message,
+                                resource_dir.display(),
+                                data_dir.display(),
+                                node_binary_path(&resource_dir).display(),
+                            ),
+                        );
+                        let _ = handle.emit("fieldnote://failed", message);
                     }
                 }
             });

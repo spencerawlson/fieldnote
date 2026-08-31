@@ -147,8 +147,16 @@ Some things need a person:
   a text box; 16:9; slide numbers present.
 - Read a report generated with a real key: is the elaboration actually
   informative, or filler? That is a judgement no assertion makes.
-- The desktop build: launch, sign in, restart, confirm you are still signed in
-  (the session secret persists), and confirm no `node.exe` survives closing the
+- The desktop build: launch it, sign in, restart, confirm you are still signed
+  in (the session secret persists), and confirm no `node.exe` survives closing
+  the window.
+
+  This one is not optional. Building the shell proves nothing about whether it
+  runs: the first two launches failed — once on the production config assertion
+  demanding an API key, once on Node rejecting Tauri's extended-length
+  `\\?\C:\…` resource path — and neither failure is visible to the compiler or
+  to any test in this suite. Verified end to end on 2026-08-31: window opens,
+  backend binds to loopback only, UI serves, and the child process dies with the
   window.
 
 ## Coverage gaps
