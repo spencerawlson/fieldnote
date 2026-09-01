@@ -1,6 +1,7 @@
 import type { Database } from '../../db/index.ts';
 import { callJson, type CallContext } from '../registry.ts';
 import { SAFETY_PREAMBLE, fenceUntrusted } from '../safety.ts';
+import { enforceVoice } from '../voice.ts';
 import { buildProjectContext, type ProjectContext } from '../context.ts';
 import { getReportTemplate, type SectionSpec } from '../../domain/templates.ts';
 import {
@@ -93,8 +94,8 @@ export async function generateReport(
 
     for (const spec of template.sections) {
       const built = spec.derived
-        ? buildDerivedSection(db, projectId, spec, context, figures, report.depth, generated.get(spec.key))
-        : buildProseSection(spec, generated.get(spec.key));
+        ? buildDerivedSection(db, projectId, spec, context, figures, report.depth, generated.get(spec.key), report.voice)
+        : buildProseSection(spec, generated.get(spec.key), report.voice);
       if (!built) continue;
       if (spec.omitWhenEmpty && built.blocks.length === 0) continue;
       sections.push(built);
@@ -223,14 +224,15 @@ function executiveDirective(audience: string, tone: string): string {
   ].join('\n');
 }
 
-function buildProseSection(spec: SectionSpec, generated: GeneratedSection | undefined) {
+function buildProseSection(spec: SectionSpec, generated: GeneratedSection | undefined, voice: string) {
   const blocks: ReportBlock[] = [];
+  const say = (text: string) => enforceVoice(text, voice);
   for (const paragraph of generated?.paragraphs ?? []) {
-    if (paragraph.trim()) blocks.push({ type: 'paragraph', text: paragraph.trim() });
+    if (paragraph.trim()) blocks.push({ type: 'paragraph', text: say(paragraph.trim()) });
   }
-  if (generated?.bullets?.length) blocks.push({ type: 'bullets', items: generated.bullets });
+  if (generated?.bullets?.length) blocks.push({ type: 'bullets', items: generated.bullets.map(say) });
   for (const callout of generated?.callouts ?? []) {
-    blocks.push({ type: 'callout', variant: callout.variant, text: callout.text });
+    blocks.push({ type: 'callout', variant: callout.variant, text: say(callout.text) });
   }
   return { key: spec.key, heading: generated?.heading || spec.heading, blocks, claimIds: [] };
 }
@@ -251,6 +253,7 @@ function buildDerivedSection(
   figures: FigureCounter,
   depth: number,
   lead?: GeneratedSection,
+  voice: string = 'first-person',
 ) {
   const blocks: ReportBlock[] = [];
   const claimIds: string[] = [];
@@ -261,7 +264,7 @@ function buildDerivedSection(
     .map((text) => text.trim())
     .filter(Boolean)
     .slice(0, 1)
-    .map((text) => ({ type: 'paragraph', text }));
+    .map((text) => ({ type: 'paragraph', text: enforceVoice(text, voice) }));
   const evidenceById = new Map(context.evidence.map((e) => [e.id, e]));
 
   const addFigures = (ids: string[]) => {

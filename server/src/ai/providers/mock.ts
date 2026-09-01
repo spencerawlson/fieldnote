@@ -637,7 +637,7 @@ function reportParagraphs(key: string, title: string, steps: MockStep[], problem
           : 'No problems were recorded during this work.',
       ];
     case 'objectives':
-      return ['The objective is taken from the project record; where the author did not state one, this section says so rather than inventing it.'];
+      return ['The objective is taken from the project record; where none was stated, this section says so rather than inventing it.'];
     case 'methodology':
       return ['Work was documented step by step as it was carried out, with evidence attached to the steps it supports.'];
     case 'lessons-learned':

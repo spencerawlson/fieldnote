@@ -119,11 +119,13 @@ fn main() {
                 // discovered later, if ever. Taking the event lets the app say
                 // where the file went, which is the whole of what was missing.
                 .on_download(|webview, event| match event {
-                    DownloadEvent::Requested { url, destination } => {
-                        let name = suggested_file_name(&url);
-                        let target = downloads_dir().join(&name);
-                        *destination = unique_path(target);
-                        let _ = webview.emit("export-download-started", name);
+                    DownloadEvent::Requested { url, .. } => {
+                        // `destination` arrives pre-filled with the webview's own
+                        // choice, which already honours Content-Disposition and
+                        // the configured Downloads folder. Leaving it alone keeps
+                        // the behaviour that has been working and confines this
+                        // handler to what was actually missing: saying so.
+                        let _ = webview.emit("export-download-started", suggested_file_name(&url));
                         true
                     }
                     DownloadEvent::Finished { url, path, success } => {
@@ -274,23 +276,6 @@ struct DownloadFinished {
     name: String,
 }
 
-/// The user's Downloads folder, falling back to the home directory.
-///
-/// `dirs` is not a dependency and this is the only place a well-known folder is
-/// needed, so the profile-relative path is good enough: on Windows the shell
-/// only relocates Downloads for users who have deliberately moved it, and the
-/// fallback covers that case by writing somewhere that certainly exists.
-fn downloads_dir() -> PathBuf {
-    if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) {
-        let candidate = PathBuf::from(&home).join("Downloads");
-        if candidate.is_dir() {
-            return candidate;
-        }
-        return PathBuf::from(home);
-    }
-    std::env::temp_dir()
-}
-
 /// Recovers the filename the backend intends from the download URL.
 ///
 /// The real name lives in Content-Disposition, which this event does not carry,
@@ -354,23 +339,6 @@ fn sanitise_file_name(name: &str) -> String {
     }
 }
 
-/// Never silently overwrite a file the person already has.
-fn unique_path(path: PathBuf) -> PathBuf {
-    if !path.exists() {
-        return path;
-    }
-    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("export").to_string();
-    let extension = path.extension().and_then(|s| s.to_str()).map(|s| format!(".{s}")).unwrap_or_default();
-    let parent = path.parent().map(PathBuf::from).unwrap_or_default();
-    for n in 1..1000 {
-        let candidate = parent.join(format!("{stem} ({n}){extension}"));
-        if !candidate.exists() {
-            return candidate;
-        }
-    }
-    path
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -412,15 +380,4 @@ mod tests {
         assert!(!name.starts_with('.'), "got {name}");
     }
 
-    #[test]
-    fn never_overwrites_an_existing_file() {
-        let dir = std::env::temp_dir().join("fieldnote-download-test");
-        let _ = std::fs::create_dir_all(&dir);
-        let taken = dir.join("report.pdf");
-        std::fs::write(&taken, b"x").unwrap();
-        let next = unique_path(taken.clone());
-        assert_ne!(next, taken);
-        assert_eq!(next.file_name().unwrap().to_str().unwrap(), "report (1).pdf");
-        let _ = std::fs::remove_file(&taken);
-    }
 }

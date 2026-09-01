@@ -1,5 +1,6 @@
 import type { Database } from '../../db/index.ts';
 import { callJson, type CallContext } from '../registry.ts';
+import { enforceVoice } from '../voice.ts';
 import { SAFETY_PREAMBLE, fenceUntrusted } from '../safety.ts';
 import { buildProjectContext, buildStepContext } from '../context.ts';
 import {
@@ -209,7 +210,7 @@ export async function elaborateStep(
     slot: claim.slot,
     provenance: claim.provenance,
     confidence: claim.confidence,
-    text: claim.text.trim(),
+    text: enforceVoice(claim.text.trim(), project.voice),
     depth,
     position: index,
     // Drop any citation the model invented for evidence that is not linked here.
@@ -339,7 +340,7 @@ export async function elaborateProblem(
       slot: claim.slot,
       provenance: claim.provenance,
       confidence: claim.confidence,
-      text: claim.text.trim(),
+      text: enforceVoice(claim.text.trim(), project.voice),
       depth,
       position: index,
       supports: claim.supports as UpsertClaimInput['supports'],
@@ -418,7 +419,7 @@ export async function elaborateProject(
       slot: claim.slot,
       provenance: claim.provenance,
       confidence: claim.confidence,
-      text: claim.text.trim(),
+      text: enforceVoice(claim.text.trim(), project.voice),
       depth,
       position: index,
       supports: claim.supports as UpsertClaimInput['supports'],

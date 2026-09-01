@@ -33,6 +33,7 @@ export function SettingsPanel({ ctx }: { ctx: WorkspaceContext }) {
   const [tone, setTone] = useState(ctx.project.tone);
   const [audience, setAudience] = useState(ctx.project.audience);
   const [voice, setVoice] = useState(ctx.project.voice);
+  const [reanalysing, setReanalysing] = useState(false);
   const [depth, setDepth] = useState(ctx.project.elaborationDepth);
   const [status, setStatus] = useState(ctx.project.status);
 
@@ -98,7 +99,7 @@ export function SettingsPanel({ ctx }: { ctx: WorkspaceContext }) {
             </Field>
             <Field
               label="Elaboration depth"
-              hint="Changing this does not rewrite existing content until you regenerate."
+              hint="Changing this does not rewrite existing content until you re-analyse below."
             >
               <select className="select" value={depth} onChange={(e) => setDepth(Number(e.target.value))} disabled={!ctx.canEdit}>
                 {ctx.session.meta.depths.map((option) => (
@@ -107,6 +108,28 @@ export function SettingsPanel({ ctx }: { ctx: WorkspaceContext }) {
                   </option>
                 ))}
               </select>
+            </Field>
+            <Field
+              label="Rewrite the AI drafting"
+              hint="Analyse project only fills gaps, so wording written under earlier settings stays as it is. This redrafts every step and problem at the current voice, tone and depth. Statements you have edited yourself are kept."
+            >
+              <Button
+                disabled={!ctx.canEdit || reanalysing}
+                loading={reanalysing}
+                onClick={async () => {
+                  setReanalysing(true);
+                  try {
+                    await api.post(`/api/projects/${ctx.projectId}/ai/analyze`, { regenerate: true });
+                    ctx.toast.show('Re-analysis started. Progress appears in the header.', 'info');
+                  } catch (error) {
+                    ctx.toast.error(error);
+                  } finally {
+                    setReanalysing(false);
+                  }
+                }}
+              >
+                Re-analyse everything
+              </Button>
             </Field>
             <Field label="Status">
               <select className="select" value={status} onChange={(e) => setStatus(e.target.value as typeof status)} disabled={!ctx.canEdit}>

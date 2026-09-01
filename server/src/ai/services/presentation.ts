@@ -1,6 +1,7 @@
 import type { Database } from '../../db/index.ts';
 import { callJson, type CallContext } from '../registry.ts';
 import { SAFETY_PREAMBLE, fenceUntrusted } from '../safety.ts';
+import { enforceVoice } from '../voice.ts';
 import { buildProjectContext, type ProjectContext } from '../context.ts';
 import { getPresentationTemplate, planSlides } from '../../domain/templates.ts';
 import {
@@ -184,11 +185,11 @@ export async function generatePresentation(
         layout: slide.layout,
         title: slide.title,
         subtitle: slide.subtitle ?? null,
-        bullets: (slide.bullets ?? []).slice(0, 6),
+        bullets: (slide.bullets ?? []).slice(0, 6).map((b) => enforceVoice(b, presentation.voice)),
         body: (slide.body ?? {}) as SlideBody,
         // Silently drop references to evidence that does not exist.
         evidenceIds: (slide.evidenceIds ?? []).filter((id) => validEvidence.has(id)).slice(0, 2),
-        speakerNotes: slide.speakerNotes ?? '',
+        speakerNotes: enforceVoice(slide.speakerNotes ?? '', presentation.voice),
         claimIds: [],
       }));
 
