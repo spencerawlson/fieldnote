@@ -1,7 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../../lib/api.ts';
 import { Alert, Button } from '../../components/ui.tsx';
 import type { WorkspaceContext } from './ProjectWorkspace.tsx';
+
+/** What the desktop shell reports back once a download has been written. */
+interface DownloadFinished {
+  success: boolean;
+  path: string | null;
+  name: string;
+}
+
+/** The slice of the Tauri global this file uses; absent in a browser. */
+interface TauriGlobal {
+  event?: {
+    listen<T>(event: string, handler: (e: { payload: T }) => void): Promise<() => void>;
+  };
+}
 
 interface ExportRecord {
   id: string;
@@ -54,6 +68,32 @@ export function ExportBar({
   const secondary = formats.filter((format) => !primary.includes(format));
   const [busy, setBusy] = useState<string | null>(null);
   const [record, setRecord] = useState<ExportRecord | null>(null);
+
+  // In the desktop build the shell handles the download itself and reports
+  // back; in a browser these events never fire and the browser's own download
+  // UI does the telling.
+  useEffect(() => {
+    const tauri = (window as unknown as { __TAURI__?: TauriGlobal }).__TAURI__;
+    if (!tauri?.event?.listen) return;
+    let stop: (() => void) | undefined;
+    let cancelled = false;
+    void tauri.event
+      .listen<DownloadFinished>('export-download-finished', ({ payload }) => {
+        if (payload.success) {
+          ctx.toast.show(payload.path ? `Saved to ${payload.path}` : `Saved ${payload.name}`, 'ok');
+        } else {
+          ctx.toast.show(`${payload.name} could not be saved`, 'danger');
+        }
+      })
+      .then((unlisten) => {
+        if (cancelled) unlisten();
+        else stop = unlisten;
+      });
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [ctx.toast]);
 
   const run = async (format: string) => {
     setBusy(format);
