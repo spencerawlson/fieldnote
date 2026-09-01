@@ -337,6 +337,15 @@ function docxBlock(block: ReportBlock, report: ResolvedReport, theme: Theme): (P
               data: figure.bytes,
               transformation: { width, height },
               type: imageTypeFor(figure.mimeType),
+              // Screenshots are usually white-backgrounded, so without a rule
+              // around them they bleed into a white page and read as nothing.
+              // Width is in EMUs: 9525 per pixel, so this is a hairline.
+              outline: {
+                width: 9525,
+                type: 'solidFill',
+                solidFillType: 'rgb',
+                value: palette.line,
+              },
             }),
           ],
         }),

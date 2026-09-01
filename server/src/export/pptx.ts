@@ -30,6 +30,7 @@ interface PptxSlide {
   addText(text: string | PptxTextRun[], options: Record<string, unknown>): void;
   addTable(rows: PptxCell[][], options: Record<string, unknown>): void;
   addImage(options: Record<string, unknown>): void;
+  addShape(shape: string, options: Record<string, unknown>): void;
   addNotes(notes: string): void;
 }
 
@@ -263,12 +264,24 @@ function addSlide(pptx: PptxDeck, slide: ResolvedSlide, theme: SlideTheme): void
   if (figure?.bytes) {
     const box = { x: 5.9, y: 1.35, w: 3.6, h: 3.0 };
     const fitted = fitBox(figure.width, figure.height, box.w, box.h);
+    const imageX = box.x + (box.w - fitted.w) / 2;
     s.addImage({
       data: `data:${figure.mimeType};base64,${figure.bytes.toString('base64')}`,
-      x: box.x + (box.w - fitted.w) / 2,
+      x: imageX,
       y: box.y,
       w: fitted.w,
       h: fitted.h,
+    });
+    // pptxgenjs cannot put a border on an image, so the rule is an unfilled
+    // rectangle laid over it. Without one a white-backgrounded screenshot —
+    // which is most of them — disappears into a white slide.
+    s.addShape('rect', {
+      x: imageX,
+      y: box.y,
+      w: fitted.w,
+      h: fitted.h,
+      fill: { type: 'none' },
+      line: { color: theme.line, width: 0.75 },
     });
     s.addText(figure.caption, {
       x: box.x,

@@ -1,7 +1,7 @@
 import type { Database } from '../../db/index.ts';
 import { callJson, type CallContext } from '../registry.ts';
 import { SAFETY_PREAMBLE, fenceUntrusted } from '../safety.ts';
-import { buildProjectContext } from '../context.ts';
+import { buildProjectContext, type ProjectContext } from '../context.ts';
 import { getPresentationTemplate, planSlides } from '../../domain/templates.ts';
 import {
   AUDIENCE_GUIDANCE,
@@ -106,7 +106,8 @@ export async function generatePresentation(
       '- At most 5 bullets per slide, at most 12 words per bullet. No paragraphs on slides.',
       '- Bullets are phrases, not sentences with full stops.',
       '- Put the explanation in `speakerNotes`: 60-150 words of what the presenter should actually say, including the technical reasoning.',
-      '- Attach evidence only where the image genuinely shows what the slide claims. A slide with an irrelevant screenshot is worse than one with none.',
+      '- The screenshots exist to be shown. Where a slide covers work that a piece of evidence supports, attach it and pick a layout that displays it.',
+      '- The judgement is relevance, not scarcity: do not attach an image that shows something other than what the slide claims, but do not leave relevant evidence unused either.',
       '- Use `before-after` only when the project has evidence of both states.',
       '- Use `diagram` only when a topology or flow genuinely aids understanding; supply plain-text ASCII in body.diagram.ascii.',
       '- Use `table` for timelines or comparisons only.',
@@ -136,7 +137,15 @@ export async function generatePresentation(
       '',
       'AVAILABLE EVIDENCE (ids you may reference):',
       JSON.stringify(
-        context.evidence.map((e) => ({ id: e.id, title: e.title, kind: e.kind, shows: e.aiDescription || e.description, links: e.links })),
+        context.evidence.map((e) => ({
+          id: e.id,
+          title: e.title,
+          kind: e.kind,
+          shows: e.aiDescription || e.description,
+          // Named rather than referenced by id: the model cannot judge whether
+          // a screenshot belongs on a slide when its only link is `stp_1a2b3c`.
+          supports: e.links.map((l) => describeTarget(context, l)).filter(Boolean),
+        })),
         null,
         2,
       ),
@@ -448,4 +457,23 @@ export async function reviewPresentation(
   }));
 
   return replaceInsights(db, projectId, 'presentation', presentationId, cleaned);
+}
+
+/**
+ * Turns an evidence link into something a reader can judge.
+ *
+ * A link records `{ targetType, targetId, role }`. The id means nothing on its
+ * own, so this resolves it to the title of the step or problem it points at,
+ * which is what makes "does this screenshot belong on this slide?" answerable.
+ */
+function describeTarget(
+  context: ProjectContext,
+  link: { targetType: string; targetId: string; role: string },
+): string | null {
+  const named =
+    context.steps.find((s) => s.id === link.targetId)?.title ??
+    context.problems.find((p) => p.id === link.targetId)?.title ??
+    null;
+  if (!named) return null;
+  return `${link.role} ${link.targetType}: ${named}`;
 }

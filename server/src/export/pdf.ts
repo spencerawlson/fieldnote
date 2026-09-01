@@ -365,8 +365,17 @@ function drawBlock(
       const { width, height } = fitImage(figure.width, figure.height, CONTENT_WIDTH, 340);
       ensureRoom(doc, height + 34);
       try {
-        doc.image(figure.bytes, MARGIN.left + (CONTENT_WIDTH - width) / 2, doc.y, { width, height });
-        doc.y += height + 6;
+        const imageX = MARGIN.left + (CONTENT_WIDTH - width) / 2;
+        const imageY = doc.y;
+        doc.image(figure.bytes, imageX, imageY, { width, height });
+        // Screenshots are usually white-backgrounded. Without a rule around
+        // them they bleed into a white page and read as nothing at all, so
+        // every figure gets the same hairline the HTML export already draws.
+        doc.save();
+        doc.lineWidth(0.5).strokeColor(style.line)
+          .rect(imageX, imageY, width, height).stroke();
+        doc.restore();
+        doc.y = imageY + height + 6;
       } catch {
         // pdfkit only decodes PNG and JPEG; anything else gets a placeholder
         // rather than aborting the whole export.
