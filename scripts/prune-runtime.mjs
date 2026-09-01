@@ -14,7 +14,7 @@
 
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, readdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -97,6 +97,41 @@ function directorySize(path) {
   return total;
 }
 
+/**
+ * Directories inside a published package that no runtime ever needs.
+ *
+ * Beyond the wasted space, one of these actively broke a build target: the
+ * MSI linker encodes file paths in code page 1252, and @fastify/send ships a
+ * test fixture named "snow ☃". A snowman in a test directory is not worth a
+ * broken installer.
+ */
+const JUNK_DIRECTORIES = new Set([
+  'test',
+  'tests',
+  '__tests__',
+  'fixtures',
+  '__fixtures__',
+  'example',
+  'examples',
+  'benchmark',
+  'benchmarks',
+  'coverage',
+  'docs',
+  '.github',
+  '.nyc_output',
+]);
+
+/** Bump when the filter changes, so a stale manifest does not skip the rebuild. */
+const FILTER_VERSION = 2;
+
+function keepPath(source) {
+  const name = basename(source);
+  if (JUNK_DIRECTORIES.has(name)) return false;
+  // Source maps are dead weight in a shipped runtime.
+  if (name.endsWith('.map')) return false;
+  return true;
+}
+
 export function pruneRuntime() {
   const server = readJson(join(ROOT, 'server', 'package.json'));
   if (!server) throw new Error('server/package.json not found');
@@ -109,11 +144,12 @@ export function pruneRuntime() {
   // every run. A manifest of what was last written makes the step a no-op when
   // nothing has changed.
   const manifestPath = join(dirname(TARGET), 'manifest.json');
-  const manifest = { packages: [...needed].sort(), lockHash: lockfileStamp() };
+  const manifest = { packages: [...needed].sort(), lockHash: lockfileStamp(), filterVersion: FILTER_VERSION };
   const existing = readJson(manifestPath);
   if (
     existing &&
     existing.lockHash === manifest.lockHash &&
+    existing.filterVersion === manifest.filterVersion &&
     JSON.stringify(existing.packages) === JSON.stringify(manifest.packages) &&
     existsSync(join(TARGET, 'fastify'))
   ) {
@@ -132,7 +168,7 @@ export function pruneRuntime() {
     // dereference: false keeps symlinked workspace packages as links rather
     // than duplicating them; there are none today, but it stays correct if
     // a shared package is added later.
-    cpSync(from, to, { recursive: true, dereference: false });
+    cpSync(from, to, { recursive: true, dereference: false, filter: keepPath });
   }
 
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));

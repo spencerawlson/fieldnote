@@ -1,4 +1,5 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { Database } from '../db/index.ts';
 import {
   createExport,
   createPresentation,
@@ -8,6 +9,7 @@ import {
   deleteReport,
   deleteSlide,
   getExport,
+  type ExportRecord,
   getPresentation,
   getReport,
   getSection,
@@ -473,10 +475,13 @@ export async function outputRoutes(app: FastifyInstance): Promise<void> {
     const { db } = authorizeProject(request, projectId);
     const record = getExport(db, exportId);
     if (!record || record.projectId !== projectId) throw notFound('Export');
-    return { export: record };
+    return { export: { ...record, fileName: exportNameFor(db, record) } };
   });
 
-  app.get('/api/projects/:projectId/exports/:exportId/download', async (request, reply) => {
+  app.get('/api/projects/:projectId/exports/:exportId/download/:fileName', downloadExport);
+  app.get('/api/projects/:projectId/exports/:exportId/download', downloadExport);
+
+  async function downloadExport(request: FastifyRequest, reply: FastifyReply) {
     const { projectId, exportId } = request.params as { projectId: string; exportId: string };
     const { db } = authorizeProject(request, projectId);
     const record = getExport(db, exportId);
@@ -485,21 +490,22 @@ export async function outputRoutes(app: FastifyInstance): Promise<void> {
       throw new AppError(409, 'export_not_ready', `The export is ${record.status}. Wait for it to finish.`);
     }
 
-    const subjectTitle =
-      record.subjectType === 'report'
-        ? getReport(db, record.subjectId)?.title
-        : record.subjectType === 'presentation'
-          ? getPresentation(db, record.subjectId)?.title
-          : 'project';
-
     const bytes = await getStorage().read(record.storageKey);
     return reply
       .header('Content-Type', contentTypeFor(record.format))
-      .header(
-        'Content-Disposition',
-        `attachment; filename="${exportFileName(subjectTitle ?? 'export', record.format, record.subjectType)}"`,
-      )
+      .header('Content-Disposition', `attachment; filename="${exportNameFor(db, record)}"`)
       .header('X-Content-Type-Options', 'nosniff')
       .send(bytes);
-  });
+  }
+}
+
+/** The filename a download will present, derived the same way the route does. */
+function exportNameFor(db: Database, record: ExportRecord): string {
+  const subjectTitle =
+    record.subjectType === 'report'
+      ? getReport(db, record.subjectId)?.title
+      : record.subjectType === 'presentation'
+        ? getPresentation(db, record.subjectId)?.title
+        : 'project';
+  return exportFileName(subjectTitle ?? 'export', record.format, record.subjectType);
 }

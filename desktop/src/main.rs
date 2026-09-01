@@ -14,6 +14,7 @@ mod server;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+use tauri::webview::DownloadEvent;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 struct AppState {
@@ -110,6 +111,34 @@ fn main() {
                 .min_inner_size(940.0, 640.0)
                 .center()
                 .resizable(true)
+                // Exports are delivered as ordinary downloads from the local
+                // backend. Left to itself the webview writes them into the
+                // Downloads folder without a prompt, without a progress
+                // indication and without telling the page anything — so the
+                // button appears to do nothing at all and the file is only
+                // discovered later, if ever. Taking the event lets the app say
+                // where the file went, which is the whole of what was missing.
+                .on_download(|webview, event| match event {
+                    DownloadEvent::Requested { url, destination } => {
+                        let name = suggested_file_name(&url);
+                        let target = downloads_dir().join(&name);
+                        *destination = unique_path(target);
+                        let _ = webview.emit("export-download-started", name);
+                        true
+                    }
+                    DownloadEvent::Finished { url, path, success } => {
+                        let _ = webview.emit(
+                            "export-download-finished",
+                            DownloadFinished {
+                                success,
+                                path: path.as_ref().map(|p| p.display().to_string()),
+                                name: suggested_file_name(&url),
+                            },
+                        );
+                        true
+                    }
+                    _ => true,
+                })
                 .build()?;
 
             std::thread::spawn(move || {
@@ -235,4 +264,163 @@ fn random_secret() -> String {
     (0..64)
         .map(|_| CHARSET[rng.gen_range(0..CHARSET.len())] as char)
         .collect()
+}
+
+/// Payload for the completion event the interface listens for.
+#[derive(Clone, serde::Serialize)]
+struct DownloadFinished {
+    success: bool,
+    path: Option<String>,
+    name: String,
+}
+
+/// The user's Downloads folder, falling back to the home directory.
+///
+/// `dirs` is not a dependency and this is the only place a well-known folder is
+/// needed, so the profile-relative path is good enough: on Windows the shell
+/// only relocates Downloads for users who have deliberately moved it, and the
+/// fallback covers that case by writing somewhere that certainly exists.
+fn downloads_dir() -> PathBuf {
+    if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) {
+        let candidate = PathBuf::from(&home).join("Downloads");
+        if candidate.is_dir() {
+            return candidate;
+        }
+        return PathBuf::from(home);
+    }
+    std::env::temp_dir()
+}
+
+/// Recovers the filename the backend intends from the download URL.
+///
+/// The real name lives in Content-Disposition, which this event does not carry,
+/// so the export route also accepts it as a trailing path segment
+/// (`…/exports/<id>/download/<name>`) purely so that it survives to here. A URL
+/// without that segment falls back to the export id, which is at least unique.
+fn suggested_file_name(url: &tauri::Url) -> String {
+    let segments: Vec<String> = url
+        .path_segments()
+        .map(|parts| parts.map(percent_decode).collect())
+        .unwrap_or_default();
+
+    let mut iter = segments.iter().rev();
+    if let Some(last) = iter.next() {
+        if !last.is_empty() && last != "download" {
+            return sanitise_file_name(last);
+        }
+    }
+    let id = segments
+        .iter()
+        .rev()
+        .find(|part| !part.is_empty() && *part != "download")
+        .cloned()
+        .unwrap_or_else(|| "export".to_string());
+    sanitise_file_name(&id)
+}
+
+fn percent_decode(part: &str) -> String {
+    let bytes = part.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(byte) = u8::from_str_radix(&part[i + 1..i + 3], 16) {
+                out.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// The name comes off a URL, so it is never allowed to steer where the file goes.
+fn sanitise_file_name(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '\"' | '<' | '>' | '|' => '_',
+            c if (c as u32) < 0x20 => '_',
+            c => c,
+        })
+        .collect();
+    let trimmed = cleaned.trim().trim_matches('.').to_string();
+    if trimmed.is_empty() {
+        "export".to_string()
+    } else {
+        trimmed
+    }
+}
+
+/// Never silently overwrite a file the person already has.
+fn unique_path(path: PathBuf) -> PathBuf {
+    if !path.exists() {
+        return path;
+    }
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("export").to_string();
+    let extension = path.extension().and_then(|s| s.to_str()).map(|s| format!(".{s}")).unwrap_or_default();
+    let parent = path.parent().map(PathBuf::from).unwrap_or_default();
+    for n in 1..1000 {
+        let candidate = parent.join(format!("{stem} ({n}){extension}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    path
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn url(path: &str) -> tauri::Url {
+        tauri::Url::parse(&format!("http://127.0.0.1:7331{path}")).unwrap()
+    }
+
+    #[test]
+    fn takes_the_name_from_the_trailing_segment() {
+        assert_eq!(
+            suggested_file_name(&url("/api/projects/p1/exports/e1/download/active-directory-lab.docx")),
+            "active-directory-lab.docx"
+        );
+    }
+
+    #[test]
+    fn percent_decodes_the_name() {
+        assert_eq!(
+            suggested_file_name(&url("/api/projects/p1/exports/e1/download/my%20lab%20report.pdf")),
+            "my lab report.pdf"
+        );
+    }
+
+    #[test]
+    fn falls_back_to_the_export_id_when_no_name_is_given() {
+        assert_eq!(
+            suggested_file_name(&url("/api/projects/p1/exports/exp_abc/download")),
+            "exp_abc"
+        );
+    }
+
+    #[test]
+    fn a_name_from_a_url_cannot_escape_the_target_directory() {
+        // Percent-encoded traversal must not survive into a path segment.
+        let name = suggested_file_name(&url("/exports/e1/download/..%2F..%2Fevil.exe"));
+        assert!(!name.contains('/'), "got {name}");
+        assert!(!name.contains('\\'), "got {name}");
+        assert!(!name.starts_with('.'), "got {name}");
+    }
+
+    #[test]
+    fn never_overwrites_an_existing_file() {
+        let dir = std::env::temp_dir().join("fieldnote-download-test");
+        let _ = std::fs::create_dir_all(&dir);
+        let taken = dir.join("report.pdf");
+        std::fs::write(&taken, b"x").unwrap();
+        let next = unique_path(taken.clone());
+        assert_ne!(next, taken);
+        assert_eq!(next.file_name().unwrap().to_str().unwrap(), "report (1).pdf");
+        let _ = std::fs::remove_file(&taken);
+    }
 }

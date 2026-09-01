@@ -8,6 +8,8 @@ interface ExportRecord {
   format: string;
   status: 'pending' | 'running' | 'ready' | 'failed';
   byteSize: number | null;
+  /** Present on a fetched record; the name the download will be saved under. */
+  fileName?: string;
   error: string | null;
   validation: { level: string; code: string; message: string }[];
 }
@@ -70,7 +72,13 @@ export function ExportBar({
         const current = await api.get<{ export: ExportRecord }>(`/api/projects/${ctx.projectId}/exports/${exportId}`);
         if (current.export.status === 'ready') {
           setRecord(current.export);
-          window.location.href = `/api/projects/${ctx.projectId}/exports/${exportId}/download`;
+          // The filename travels in the URL as well as in Content-Disposition:
+          // the desktop shell handles the download itself and only sees the
+          // URL, so this is how the saved file gets a real name.
+          const name = current.export.fileName ?? `${subjectType}.${format}`;
+          window.location.href =
+            `/api/projects/${ctx.projectId}/exports/${exportId}/download/${encodeURIComponent(name)}`;
+          ctx.toast.show(`Saving ${name}…`, 'info');
           return;
         }
         if (current.export.status === 'failed') {
