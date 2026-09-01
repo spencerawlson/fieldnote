@@ -165,6 +165,16 @@ export function ProjectWorkspace({ projectId, session }: { projectId: string; se
         <Button onClick={() => setAssistantOpen(true)}>Ask about this project</Button>
         {context.canEdit ? (
           <Button
+            onClick={() => {
+              searchParams.set('intake', '');
+              setSearchParams(searchParams, { replace: false });
+            }}
+          >
+            Add work
+          </Button>
+        ) : null}
+        {context.canEdit ? (
+          <Button
             variant="primary"
             disabled={activeJobs.length > 0}
             onClick={async () => {

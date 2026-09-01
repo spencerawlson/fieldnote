@@ -164,6 +164,24 @@ function stageWebView2Loader() {
   log(`staged WebView2Loader.dll (${arch})`);
 }
 
+/**
+ * Clears Tauri's staged copy of the interface.
+ *
+ * Tauri copies `frontendDist` into the target directory but never removes what
+ * is already there, so every rebuild leaves the previous build's hashed assets
+ * behind and bundles them too. Four dead files had accumulated by 0.1.0,
+ * costing 588 KB in the installer and — worse — shipping stale JavaScript
+ * alongside the live bundle.
+ */
+function clearStagedWeb() {
+  for (const profile of ['debug', 'release']) {
+    const staged = join(DESKTOP, 'target', profile, 'web', 'dist');
+    if (!existsSync(staged)) continue;
+    rmSync(staged, { recursive: true, force: true });
+    log(`cleared the staged interface (${profile})`);
+  }
+}
+
 function checkNodeVersion() {
   const major = Number(process.versions.node.split('.')[0]);
   if (major < 24) {
@@ -180,6 +198,7 @@ checkNodeVersion();
 // bundling. Rebuilding web/dist afterwards leaves the manifest pointing at
 // hashed filenames that no longer exist.
 buildWebIfNeeded();
+clearStagedWeb();
 pruneRuntime();
 stageWebView2Loader();
 copyNodeSidecar();
